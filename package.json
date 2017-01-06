@@ -1,0 +1,27 @@
+{
+  "name": "wonderworldapi",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node ./bin/www"
+  },
+  "dependencies": {
+    "body-parser": "~1.15.2",
+    "cookie-parser": "~1.4.3",
+    "cors": "^2.8.1",
+    "debug": "~2.2.0",
+    "ejs": "~2.5.2",
+    "express": "~4.14.0",
+    "github": "^7.2.0",
+    "github-api": "^2.3.0",
+    "lodash": "^4.17.3",
+    "morgan": "~1.7.0",
+    "node-sass-middleware": "0.9.8",
+    "promise-redis": "0.0.5",
+    "request": "^2.79.0",
+    "serve-favicon": "~2.3.0"
+  },
+  "devDependencies": {
+    "tap": "^8.0.1"
+  }
+}
