@@ -37,7 +37,7 @@ module.exports = class ArticlesModel {
   }
 
   getIndexData(sha) {
-    return  this.github.gitdata.getTree({
+    return this.github.gitdata.getTree({
       owner: 'bingomanatee',
       repo: 'wonderland_labs_content',
       sha,
@@ -53,42 +53,45 @@ module.exports = class ArticlesModel {
     return /\.json$/.test(item.path) && (!/\.backups/.test(item.path));
   }
 
+  recordArticles(tree) {
+    // recording the path and sha of each .md file
+    return _(tree)
+      .filter(this.isArticle)
+      .map((item) => this.redisClient.hset(this.prefix + INDEX_KEY, item.path, item.sha))
+      .value()
+  }
+
+  recordMetadata(tree) {
+    return _(tree)
+      .filter(this.isMetadata)
+      .map((item) => {
+        let path = item.path.replace(/\.json$/, '.md');
+        let article = new Article(this.github, this.redisClient, {path: path, prefix: this.prefix});
+        return article.purgeMetadata()
+          .then(() => article.loadMetadata(item))
+          .then(() => {
+            if (article.on_homepage && (!article.hide)) {
+              this.redisClient.lpush(this.prefix + HOMEPAGE_KEY, article.path);
+            }
+          })
+      })
+      .value();
+  }
+
   load() {
     return Promise.all([
       this.redisClient.del(this.prefix + HOMEPAGE_KEY),
       this.redisClient.del(this.prefix + INDEX_KEY)
     ])
-      .then(() => {
-        return new Promise((resolve, reject) => {
-          getLastSha(this.github)
-            .then((sha) => this.getIndexData(sha))
-            .then((data) => {
-
-            console.log('data from index: ', data);
-              // recording the path and sha of each .md file
-              _(data.tree)
-                .filter(this.isArticle)
-                .each((item) => this.redisClient.hset(this.prefix + INDEX_KEY, item.path, item.sha));
-
-              _(data.tree)
-                .filter(this.isMetadata)
-                .each((item) => {
-                  let path = item.path.replace(/\.json$/, '.md');
-                  let article = new Article(this.github, this.redisClient, {path: path, prefix: this.prefix});
-                  article.purgeMetadata()
-                    .then(() => article.loadMetadata(item))
-                    .then(() => {
-                      if (article.on_homepage && (!article.hide)) {
-                        this.redisClient.lpush(this.prefix + HOMEPAGE_KEY, article.path);
-                      }
-                    })
-                    .catch((err) => { console.log('error writing file: ', JSON.stringify(err))})
-                });
-            }).catch((err) => {
-            reject(err);
-          });
-        });
-      })
+      .then(() => getLastSha(this.github))
+      .then((sha) => this.getIndexData(sha))
+      .then((data) => Promise.all(
+        this.recordArticles(data.tree)
+          .concat(
+            this.recordMetadata(data.tree)
+          )
+        ) // end all
+      ) // end then
   }
 
   set articlesList(value) {
@@ -98,21 +101,21 @@ module.exports = class ArticlesModel {
 
   getArticle(path, withContent) {
     /*
-    console.log('loading path:', path);
-    const key = `${path}.md`;
-    return new Promise((resolve, reject) => {
-      if (!this.articlesList.has(key)) {
-        console.log('no key found: ', path);
-        return reject(new Error(`cannot find ${key}`));
-      }
-      const article = this.articlesList.get(key);
-      if ((!withContent) || article.contentLoaded) {
-        resolve(article);
-      } else {
-        article.load()
-          .then(() => resolve(article));
-      }
-    });
-    */
+     console.log('loading path:', path);
+     const key = `${path}.md`;
+     return new Promise((resolve, reject) => {
+     if (!this.articlesList.has(key)) {
+     console.log('no key found: ', path);
+     return reject(new Error(`cannot find ${key}`));
+     }
+     const article = this.articlesList.get(key);
+     if ((!withContent) || article.contentLoaded) {
+     resolve(article);
+     } else {
+     article.load()
+     .then(() => resolve(article));
+     }
+     });
+     */
   }
 }

@@ -110,7 +110,6 @@ module.exports = class Article {
                       return value.join("\t");
                     }
                     if (_.isObject(value)) {
-                      console.log('object: ', key, value);
                       return JSON.stringify(value);
                     }
                     return value;

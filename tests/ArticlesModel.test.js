@@ -102,7 +102,7 @@ if (true) {
         console.log('github commands: ', githubCommandsExecuted);
         articles.redisClient.get(prefix + 'homepage-articles')
           .then((result) => {
-            console.log('homepage articles: ', result);
+            console.log('========= homepage articles: ', result);
             assert.end();
           })
       })
