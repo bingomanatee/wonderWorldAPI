@@ -1,0 +1,12 @@
+{
+    "file_name": "your_car",
+    "title": "What your car says about you",
+    "intro": "Car ads seem to imply your car is the loudest part of your personal marketing campaign. What message is is putting out for you?",
+    "revised": "2013-09-18 01:59",
+    "tags": [],
+    "on_homepage": true,
+    "hide": false,
+    "folder": "",
+    "on_folder_homepage": false,
+    "folder_homepage_weight": 0
+}

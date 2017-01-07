@@ -22,6 +22,8 @@
     "serve-favicon": "~2.3.0"
   },
   "devDependencies": {
+    "q": "^1.4.1",
+    "redis-js": "^0.1.2",
     "tap": "^8.0.1"
   }
 }

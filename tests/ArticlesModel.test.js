@@ -1,9 +1,10 @@
 const tap = require('tap');
 const ArticlesModel = require('./../models/ArticlesModel');
-const github = require('./../models/utils/github');
+// const github = require('./../models/utils/github');
 const getLastSha = require('./../models/utils/getLastSha');
 const fs = require('fs');
-
+const promiseRedisForMock = require('./promiseRedisForMock');
+const redis = require('./../models/utils/redisClient');
 
 if (false) {
   // creating a fixture for the articles.json
@@ -24,36 +25,39 @@ if (false) {
 }
 
 if (false) {
+  // pulling blobs of article content
+  tap.test('blobs.js', (assert) => {
+    const mockRedis = {};
+    const articles = require('./fixtures/articles.json');
+
+    Promise.all(articles.map((article) => {
+      new Promise((resolve) => {
+        if (!article.type === 'blob') {
+          return resolve();
+        }
+
+        github.gitdata.getBlob({
+          sha: article.sha,
+          owner: 'bingomanatee',
+          repo: 'wonderland_labs_content',
+          page: 1
+        }).then((result) => {
+          let content = Buffer.from(result.content, 'base64').toString();
+          fs.writeFile(`fixtures/blobs/${article.sha}.txt`, content, resolve);
+        })
+      })
+    })).then(() => assert.end());
+  });
+}
+
+if (true) {
   tap.test('ArticlesModel.js', (assert) => {
-    const redisCommandsExecuted = [];
     const githubCommandsExecuted = [];
 
     function logGithub(msg) {
       console.log('github:: ', msg);
       githubCommandsExecuted.push(msg);
     }
-
-    function logRedis(msg) {
-      console.log('redis :: ', msg);
-      redisCommandsExecuted.push(msg);
-    }
-
-    const mockRedis = {
-      del: (key) => {
-        logRedis(`del ${key}`);
-        return new Promise((resolve) => resolve(1));
-      },
-      hset: (path, key, value) => {
-        logRedis(`${path} [${key}] => ${value}`);
-        return new Promise((resolve) => resolve(1));
-      },
-      get: (key) => {
-        logRedis(`get ${key}`);
-        return new Promise((resolve) => {
-          resolve(foo);
-        });
-      }
-    };
 
     const mockGithub = {
       gitdata: {
@@ -63,10 +67,20 @@ if (false) {
             resolve({tree: require('./fixtures/articles.json')});
           });
         },
-        getBlob: (sha) => {
+        getBlob: (data) => {
+          let sha = data.sha;
           logGithub(`getBlob(${sha})`)
-          return new Promise((resolve) => {
-
+          return new Promise((resolve, reject) => {
+            let shaPath = `fixtures/blobs/${sha}.txt`;
+            if (!fs.existsSync(shaPath)) {
+              logGithub(`... error sha not found: ${sha}`);
+              return reject(`cannot find sha ${sha}`);
+            }
+            fs.readFile(shaPath, (err, content) => {
+              resolve({
+                content: content.toString('base64')
+              });
+            });
           });
         }
       },
@@ -80,13 +94,17 @@ if (false) {
       }
     };
 
-    let articles = new ArticlesModel(mockGithub, mockRedis);
+    let prefix = 'test:' + Math.random() + ':';
+    let articles = new ArticlesModel(mockGithub, redis, prefix);
 
     articles.load()
       .then(() => {
         console.log('github commands: ', githubCommandsExecuted);
-        console.log('redis commands: ', redisCommandsExecuted);
-        assert.end();
+        articles.redisClient.get(prefix + 'homepage-articles')
+          .then((result) => {
+            console.log('homepage articles: ', result);
+            assert.end();
+          })
       })
   });
 }

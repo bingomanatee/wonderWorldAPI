@@ -4,15 +4,41 @@ const path = require('path');
 module.exports = class Article {
 
   constructor(github, redisClient, data) {
-    this.github = github;
-    this.redisClient = redisClient;
     this.path = data.path;
     this.sha = data.sha;
+    this.prefix = data.prefix;
     this.data = data;
     this.hide = false;
     this.title = path.basename(this.path, '.md');
     this.intro = '';
     this.revised = '';
+    this.github = github;
+    this.redisClient = redisClient;
+  }
+
+  get prefix() {
+    return this._prefix || '';
+  }
+
+  set prefix(value) {
+    if (!value) throw new Error('prefix must exist');
+    this._prefix = value;
+  }
+
+  get github() {
+    return this._github;
+  }
+
+  set github(value) {
+    this._github = value;
+  }
+
+  get redisClient() {
+    return this._redisClient;
+  }
+
+  set redisClient(value) {
+    this._redisClient = value;
   }
 
   contentLoaded() {
@@ -24,7 +50,7 @@ module.exports = class Article {
   }
 
   get redisPath() {
-    return this.path.replace('/', ':');
+    return this.prefix + this.path.replace('/', ':');
   }
 
   load() {
@@ -75,12 +101,25 @@ module.exports = class Article {
               if (metaData) {
                 return Promise.all(_(metaData)
                   .keys()
-                  .map((key) => this.redisClient.hset(this.redisMetaPath, key, metaData[key]))
+                  .map((key) => this.redisClient.hset(this.redisMetaPath, key, (() => {
+                    let value = metaData[key];
+                    if (_.isNull(value)) {
+                        return '';
+                    }
+                    if (_.isArray(value)) {
+                      return value.join("\t");
+                    }
+                    if (_.isObject(value)) {
+                      console.log('object: ', key, value);
+                      return JSON.stringify(value);
+                    }
+                    return value;
+                  })()))
                   .value());
               }
             })
             .catch((err) => {
-              console.log(`error getting metadata for ${this.path}: `, err);
+              console.log(`error getting metadata for ${this.path}: `, require('util').inspect(err));
             });
         }
       });

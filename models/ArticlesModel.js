@@ -6,9 +6,18 @@ const INDEX_KEY = 'article-index';
 const HOMEPAGE_KEY = 'homepage-articles';
 
 module.exports = class ArticlesModel {
-  constructor(github, redisClient) {
+  constructor(github, redisClient, prefix) {
     this.github = github;
-    this._redisClient = redisClient;
+    this.redisClient = redisClient;
+    this.prefix = prefix;
+  }
+
+  get prefix() {
+    return this._prefix || '';
+  }
+
+  set prefix(value) {
+    this._prefix = value;
   }
 
   get redisClient() {
@@ -46,8 +55,8 @@ module.exports = class ArticlesModel {
 
   load() {
     return Promise.all([
-      this.redisClient.del(HOMEPAGE_KEY),
-      this.redisClient.del(INDEX_KEY)
+      this.redisClient.del(this.prefix + HOMEPAGE_KEY),
+      this.redisClient.del(this.prefix + INDEX_KEY)
     ])
       .then(() => {
         return new Promise((resolve, reject) => {
@@ -59,21 +68,21 @@ module.exports = class ArticlesModel {
               // recording the path and sha of each .md file
               _(data.tree)
                 .filter(this.isArticle)
-                .each((item) => this.redisClient.hset(INDEX_KEY, item.path, item.sha));
+                .each((item) => this.redisClient.hset(this.prefix + INDEX_KEY, item.path, item.sha));
 
               _(data.tree)
                 .filter(this.isMetadata)
                 .each((item) => {
                   let path = item.path.replace(/\.json$/, '.md');
-                  console.log(`metadata found for ${path}`);
-                  let article = new Article({path: path});
+                  let article = new Article(this.github, this.redisClient, {path: path, prefix: this.prefix});
                   article.purgeMetadata()
                     .then(() => article.loadMetadata(item))
                     .then(() => {
                       if (article.on_homepage && (!article.hide)) {
-                        this.redisClient.lpush(HOMEPAGE_KEY, article.path);
+                        this.redisClient.lpush(this.prefix + HOMEPAGE_KEY, article.path);
                       }
                     })
+                    .catch((err) => { console.log('error writing file: ', JSON.stringify(err))})
                 });
             }).catch((err) => {
             reject(err);
