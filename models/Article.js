@@ -21,7 +21,9 @@ module.exports = class Article {
   }
 
   set prefix(value) {
-    if (!value) throw new Error('prefix must exist');
+    if (!value) {
+      throw new Error('prefix must exist');
+    }
     this._prefix = value;
   }
 
@@ -83,7 +85,7 @@ module.exports = class Article {
               console.log(result);
             });
         } else {
-          this.github.gitdata.getBlob({
+          return this.github.gitdata.getBlob({
             sha: data.sha,
             owner: 'bingomanatee',
             repo: 'wonderland_labs_content',
@@ -101,19 +103,35 @@ module.exports = class Article {
               if (metaData) {
                 return Promise.all(_(metaData)
                   .keys()
-                  .map((key) => this.redisClient.hset(this.redisMetaPath, key, (() => {
+                  .map((key) => () => {
                     let value = metaData[key];
-                    if (_.isNull(value)) {
-                        return '';
+                    if (_.isNull(value) || _.isUndefined(value)) {
+                      value = '';
                     }
                     if (_.isArray(value)) {
-                      return value.join("\t");
+                      value = value.join("\t");
                     }
                     if (_.isObject(value)) {
-                      return JSON.stringify(value);
+                      value = JSON.stringify(value);
                     }
-                    return value;
-                  })()))
+                    if (_.isBoolean(value)) {
+                      value = value ? '1' : '0';
+                    }
+                    if (typeof value === 'number') {
+                      value = value.toString();
+                    }
+
+                    if (!(typeof value === 'string')) {
+                      value = `${value}`;
+                    }
+                    try {
+                      return this.redisClient.hset(this.redisMetaPath, key, value);
+                    } catch (err) {
+                      console.log('error with key ', key, 'value: ', value, err.message);
+                      return false;
+                    }
+                  })
+                  .compact()
                   .value());
               }
             })

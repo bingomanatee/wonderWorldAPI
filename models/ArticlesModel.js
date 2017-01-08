@@ -36,6 +36,31 @@ module.exports = class ArticlesModel {
     this._github = value;
   }
 
+  get homepageRedisPath() {
+    return `${this.prefix}${HOMEPAGE_KEY}`;
+  }
+
+  purgeHomepageIndex() {
+    return this.redisClient.del(this.homepageRedisPath);
+  }
+
+  purgeArticleIndex() {
+    return this.redisClient.del(this.indexRedisPath);
+  }
+
+  setHomepageIndex(path) {
+    try {
+      return this.redisClient.rpush(this.homepageRedisPath, path)
+    } catch (err) {
+      console.log('error setting homepage path: ', path, err.message);
+    }
+  }
+
+  getHomepages() {
+    return this.redisClient.llen(this.homepageRedisPath)
+      .then((len) => this.redisClient.lrange(this.homepageRedisPath, 0, len))
+  }
+
   getIndexData(sha) {
     return this.github.gitdata.getTree({
       owner: 'bingomanatee',
@@ -53,29 +78,57 @@ module.exports = class ArticlesModel {
     return /\.json$/.test(item.path) && (!/\.backups/.test(item.path));
   }
 
+  get indexRedisPath() {
+    return `${this.prefix}${INDEX_KEY}`;
+  }
+
+  getArticleList() {
+    return this.redisClient.hgetall(this.indexRedisPath)
+  }
+
+  listArticle(path, sha) {
+    return this.redisClient.hset(this.indexRedisPath, path, sha);
+  }
+
   recordArticles(tree) {
     // recording the path and sha of each .md file
-    return _(tree)
-      .filter(this.isArticle)
-      .map((item) => this.redisClient.hset(this.prefix + INDEX_KEY, item.path, item.sha))
-      .value()
+    return this.purgeArticleIndex()
+      .then(() => Promise.all(_(tree)
+        .filter(this.isArticle)
+        .map((item) => {
+          try {
+            return this.listArticle(item.path, item.sha);
+          } catch (err) {
+            console.log('error in hset of  INDEX: ', item.path, item.sha, ':', err.message);
+          }
+        })
+        .compact()
+        .value()));
   }
 
   recordMetadata(tree) {
-    return _(tree)
-      .filter(this.isMetadata)
-      .map((item) => {
-        let path = item.path.replace(/\.json$/, '.md');
-        let article = new Article(this.github, this.redisClient, {path: path, prefix: this.prefix});
-        return article.purgeMetadata()
-          .then(() => article.loadMetadata(item))
-          .then(() => {
-            if (article.on_homepage && (!article.hide)) {
-              this.redisClient.lpush(this.prefix + HOMEPAGE_KEY, article.path);
-            }
+    return this.purgeHomepageIndex()
+      .then(() => Promise.all(
+        _(tree)
+          .filter(this.isMetadata)
+          .map((item) => {
+            let path = item.path.replace(/\.json$/, '.md');
+            let article = new Article(this.github, this.redisClient, {path: path, prefix: this.prefix});
+            return article.purgeMetadata()
+              .then(() => article.loadMetadata(item))
+              .then(() => {
+                if (article.on_homepage && (!article.hide)) {
+                  try {
+                    return this.setHomepageIndex(path);
+                  } catch (err) {
+                    console.log('error lpushing: ', article.path, err.message);
+                  }
+                }
+              })
           })
-      })
-      .value();
+          .value()
+        )
+      )
   }
 
   load() {
@@ -85,11 +138,10 @@ module.exports = class ArticlesModel {
     ])
       .then(() => getLastSha(this.github))
       .then((sha) => this.getIndexData(sha))
-      .then((data) => Promise.all(
-        this.recordArticles(data.tree)
-          .concat(
-            this.recordMetadata(data.tree)
-          )
+      .then((data) => Promise.all([
+          this.recordArticles(data.tree),
+          this.recordMetadata(data.tree)
+        ]
         ) // end all
       ) // end then
   }
