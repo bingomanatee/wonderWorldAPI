@@ -12,6 +12,8 @@ module.exports = class ArticlesModel {
     this.prefix = prefix;
   }
 
+  /* --------- properties --------- */
+
   get prefix() {
     return this._prefix || '';
   }
@@ -40,17 +42,31 @@ module.exports = class ArticlesModel {
     return `${this.prefix}${HOMEPAGE_KEY}`;
   }
 
+  get indexRedisPath() {
+    return `${this.prefix}${INDEX_KEY}`;
+  }
+
+  /** ----------- methods ------------- */
+
+  purge() {
+    return this.redisClient.keys(`${this.prefix}*`)
+      .then(
+        (keys) => Promise.all(keys.map((key) => this.redisClient.del(key)))
+      )
+  }
+
   purgeHomepageIndex() {
     return this.redisClient.del(this.homepageRedisPath);
   }
 
   purgeArticleIndex() {
+    // @TODO: test! doesn't work I think
     return this.redisClient.del(this.indexRedisPath);
   }
 
   setHomepageIndex(path) {
     try {
-      return this.redisClient.rpush(this.homepageRedisPath, path)
+      return this.redisClient.rpush(this.homepageRedisPath, path);
     } catch (err) {
       console.log('error setting homepage path: ', path, err.message);
     }
@@ -78,10 +94,6 @@ module.exports = class ArticlesModel {
     return /\.json$/.test(item.path) && (!/\.backups/.test(item.path));
   }
 
-  get indexRedisPath() {
-    return `${this.prefix}${INDEX_KEY}`;
-  }
-
   getArticleList() {
     return this.redisClient.hgetall(this.indexRedisPath)
   }
@@ -106,26 +118,28 @@ module.exports = class ArticlesModel {
         .value()));
   }
 
+  recordArticleMetadata(item) {
+    let path = item.path.replace(/\.json$/, '.md');
+    let article = new Article(this.github, this.redisClient, {path: path, prefix: this.prefix});
+    return article.purgeMetadata()
+      .then(() => article.loadMetadata(item))
+      .then(() => {
+        if (article.on_homepage && (!article.hide)) {
+          try {
+            return this.setHomepageIndex(path);
+          } catch (err) {
+            console.log('error lpushing: ', article.path, err.message);
+          }
+        }
+      })
+  }
+
   recordMetadata(tree) {
     return this.purgeHomepageIndex()
       .then(() => Promise.all(
         _(tree)
           .filter(this.isMetadata)
-          .map((item) => {
-            let path = item.path.replace(/\.json$/, '.md');
-            let article = new Article(this.github, this.redisClient, {path: path, prefix: this.prefix});
-            return article.purgeMetadata()
-              .then(() => article.loadMetadata(item))
-              .then(() => {
-                if (article.on_homepage && (!article.hide)) {
-                  try {
-                    return this.setHomepageIndex(path);
-                  } catch (err) {
-                    console.log('error lpushing: ', article.path, err.message);
-                  }
-                }
-              })
-          })
+          .map((item) => this.recordArticleMetadata(item))
           .value()
         )
       )
@@ -146,28 +160,17 @@ module.exports = class ArticlesModel {
       ) // end then
   }
 
-  set articlesList(value) {
-    throw new Error('deprecating articlesList')
-    this._articlesList = value;
-  }
-
-  getArticle(path, withContent) {
-    /*
-     console.log('loading path:', path);
-     const key = `${path}.md`;
-     return new Promise((resolve, reject) => {
-     if (!this.articlesList.has(key)) {
-     console.log('no key found: ', path);
-     return reject(new Error(`cannot find ${key}`));
-     }
-     const article = this.articlesList.get(key);
-     if ((!withContent) || article.contentLoaded) {
-     resolve(article);
-     } else {
-     article.load()
-     .then(() => resolve(article));
-     }
-     });
-     */
+  getArticle(path) {
+    let data = {path, prefix: this.prefix};
+    return this.redisClient.hget(this.indexRedisPath, path)
+      .then((sha) => {
+        if (!sha) {
+          throw new Error(`cannot find sha for ${path}`);
+        }
+        data.sha = sha;
+        let article = new Article(this.github, this.redisClient, data);
+        return article.readMetadata()
+          .then(() => article);
+      })
   }
 }

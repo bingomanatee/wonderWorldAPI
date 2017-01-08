@@ -1,6 +1,32 @@
 'use strict';
 const _ = require('lodash');
 const path = require('path');
+const blobRequest = require('./utils/blobRequest');
+
+function toString(value) {
+  if (_.isNull(value) || _.isUndefined(value)) {
+    value = '';
+  }
+  if (_.isArray(value)) {
+    value = value.join("\t");
+  }
+  if (_.isObject(value)) {
+    value = JSON.stringify(value);
+  }
+  if (_.isBoolean(value)) {
+    value = value ? '1' : '0';
+  }
+  if (typeof value === 'number') {
+    value = value.toString();
+  }
+
+  if (!(typeof value === 'string')) {
+    value = `${value}`;
+  }
+
+  return value;
+}
+
 module.exports = class Article {
 
   constructor(github, redisClient, data) {
@@ -71,6 +97,19 @@ module.exports = class Article {
     return `${this.redisPath}:meta`
   }
 
+  readMetadata() {
+    return this.redisClient.hgetall(this.redisMetaPath)
+      .then((meta) => {
+        // if(/client_side/.test(this.path)) console.log('metadata found for ', this.path, meta)
+        for (let field of 'title,intro,revised,on_homepage,hide,revised'.split(',')) {
+          this[field] = meta[field];
+        }
+        this.on_homepage = !!parseInt(meta.on_homepage);
+        this.hide = !!parseInt(meta.hide);
+        return meta;
+      })
+  }
+
   purgeMetadata() {
     return this.redisClient.del(this.redisMetaPath);
   }
@@ -79,60 +118,27 @@ module.exports = class Article {
     return this.metaLoaded()
       .then((loaded) => {
         if (loaded) {
-          this.redisClient.get(this.redisMetaPath)
+          this.readMetadata()
             .then((result) => {
-              console.log('result of redis meta load:');
-              console.log(result);
+              console.log('result of redis meta load:', result);
             });
         } else {
-          return this.github.gitdata.getBlob({
-            sha: data.sha,
-            owner: 'bingomanatee',
-            repo: 'wonderland_labs_content',
-            page: 1
-          })
-            .then((result) => {
-              let metaData;
-              let content = Buffer.from(result.content, 'base64');
+          return blobRequest(this.github, data.sha, 1)
+            .then((text) => {
+              var metaData;
               try {
-                metaData = JSON.parse(content);
+                metaData = JSON.parse(text);
                 _.extend(this, metaData);
-              } catch (err) {
-                console.log(`error parsing metadata for ${data.sha} (${content})`);
-              }
-              if (metaData) {
-                return Promise.all(_(metaData)
-                  .keys()
-                  .map((key) => () => {
-                    let value = metaData[key];
-                    if (_.isNull(value) || _.isUndefined(value)) {
-                      value = '';
-                    }
-                    if (_.isArray(value)) {
-                      value = value.join("\t");
-                    }
-                    if (_.isObject(value)) {
-                      value = JSON.stringify(value);
-                    }
-                    if (_.isBoolean(value)) {
-                      value = value ? '1' : '0';
-                    }
-                    if (typeof value === 'number') {
-                      value = value.toString();
-                    }
+                let promises = [];
 
-                    if (!(typeof value === 'string')) {
-                      value = `${value}`;
-                    }
-                    try {
-                      return this.redisClient.hset(this.redisMetaPath, key, value);
-                    } catch (err) {
-                      console.log('error with key ', key, 'value: ', value, err.message);
-                      return false;
-                    }
-                  })
-                  .compact()
-                  .value());
+                for (let key in metaData) {
+                  let value =toString(metaData[key]);
+                  promises.push( this.redisClient.hset(this.redisMetaPath, key, value));
+                }
+
+                return Promise.all(promises);
+              } catch (err) {
+                console.log(`error parsing metadata for ${data.sha} (${text})`);
               }
             })
             .catch((err) => {
