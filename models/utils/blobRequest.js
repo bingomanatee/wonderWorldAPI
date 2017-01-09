@@ -7,5 +7,5 @@ module.exports = (github, sha, page) => {
   };
 
   return github.gitdata.getBlob(request)
-    .then((result) => Buffer.from(result.content, 'base64'));
+    .then((result) => Buffer.from(result.content, 'base64').toString());
 }

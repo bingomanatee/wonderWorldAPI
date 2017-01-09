@@ -78,23 +78,26 @@ module.exports = class Article {
   }
 
   get redisPath() {
-    return this.prefix + this.path.replace('/', ':');
+    return `${this.prefix}${this.path}`
   }
 
-  load() {
-    return this.github.gitdata.getBlob({
-      sha: this.sha,
-      owner: 'bingomanatee',
-      repo: 'wonderland_labs_content',
-      page: 1
-    }).then((result) => {
-      let content = Buffer.from(result.content, 'base64');
-      redisClient.set(this.redisPath, content.toString());
-    });
+  loadContent() {
+    console.log('content sha:', this.sha);
+    return blobRequest(this.github, this.sha, 1)
+      .then((content) => {
+        console.log('content for ', this.path);
+        console.log(content);
+        this.redisClient.set(this.redisPath, content);
+        return content;
+      });
   }
 
   get redisMetaPath() {
     return `${this.redisPath}:meta`
+  }
+
+  get redisContentPath() {
+    return `${this.redisPath}:content`;
   }
 
   readMetadata() {
@@ -132,8 +135,8 @@ module.exports = class Article {
                 let promises = [];
 
                 for (let key in metaData) {
-                  let value =toString(metaData[key]);
-                  promises.push( this.redisClient.hset(this.redisMetaPath, key, value));
+                  let value = toString(metaData[key]);
+                  promises.push(this.redisClient.hset(this.redisMetaPath, key, value));
                 }
 
                 return Promise.all(promises);
@@ -226,14 +229,7 @@ module.exports = class Article {
   content() {
     return this.contentLoaded()
       .then((exists) => {
-        if (exists) {
-          return this.redisClient.get(this.redisPath);
-        } else {
-          return this.load()
-            .then(() => {
-              return this.redisClient.get(this.redisPath);
-            })
-        }
+        return exists ? this.redisClient.get(this.redisContentPath) : this.loadContent();
       });
   }
 }
