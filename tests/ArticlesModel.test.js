@@ -4,7 +4,7 @@ const ArticlesModel = require('./../models/ArticlesModel');
 const getLastSha = require('./../models/utils/getLastSha');
 const fs = require('fs');
 const promiseRedisForMock = require('./promiseRedisForMock');
-const redis = require('./../models/utils/redisClient');
+const redis = require('./../models/utils/redis');
 const _ = require('lodash');
 const mockGithub = require('./mockGithub');
 

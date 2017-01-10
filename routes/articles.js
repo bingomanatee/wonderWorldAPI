@@ -1,20 +1,42 @@
 var express = require('express');
 var router = express.Router();
 let github = require('./../models/utils/github');
-const redisClient = require('../models/utils/redisClient');
-
-let articles = require('./../models/articles')(github, redisClient, 'live');
-redisClient.flushall()
+const redis = require('./../models/utils/redis');
+const PREFIX = 'live:';
+const HOME_PAGE_CACHE_PATH = `${PREFIX}HOMEPAGE_CACHE`;
+let articles = require('./../models/articles')(github, redis, PREFIX);
+redis.flushall()
   .then(() => articles.load());
 
 /* GET users listing. */
 router.get('/homepage', function (req, res, next) {
-  articles.getHomepages()
-    .then((homepages) => {
-      Promise.all(homepages.map((path) => articles.getArticle(path)))
-        .then((articles) => {
-          res.send(articles.map((article) => article.toJSON()));
-        });
+  redis.exists(HOME_PAGE_CACHE_PATH)
+    .then((exists) => {
+      if (exists) {
+        redis.get(HOME_PAGE_CACHE_PATH)
+          .then((cache) => res.send(JSON.parse(cache)));
+      } else {
+        articles.getHomepages()
+          .then((homepages) => {
+            Promise.all(homepages.map((path) => articles.getArticle(path)))
+              .then((articles) => {
+                let homepageContent = articles.map((article) => article.toJSON());
+                redis.set(HOME_PAGE_CACHE_PATH, JSON.stringify(homepageContent))
+                  .then(() => {
+                    redis.expire(HOME_PAGE_CACHE_PATH, 30);
+                    res.send(homepageContent);
+                  });
+              });
+          });
+      }
+    });
+});
+
+router.get('/chapter/:chapter', function (req, res, next) {
+  articles.getChapter(req.params.chapter)
+    .then((chapterArticles) => {
+ //   console.log('chapterArticles: ', chapterArticles);
+      res.send(chapterArticles.map((article) => article.toJSON()));
     });
 });
 

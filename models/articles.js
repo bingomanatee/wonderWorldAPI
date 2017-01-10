@@ -2,4 +2,4 @@
 
 const Articles = require('./ArticlesModel');
 
-module.exports = (github, redisClient, prefix) => new Articles(github ,redisClient, prefix || 'wonderWorld');
+module.exports = (github, redis, prefix) => new Articles(github ,redis, prefix || 'wonderWorld');

@@ -29,7 +29,7 @@ function toString(value) {
 
 module.exports = class Article {
 
-  constructor(github, redisClient, data) {
+  constructor(github, redis, data) {
     this.path = data.path;
     this.sha = data.sha;
     this.prefix = data.prefix;
@@ -39,7 +39,7 @@ module.exports = class Article {
     this.intro = '';
     this.revised = '';
     this.github = github;
-    this.redisClient = redisClient;
+    this.redis = redis;
   }
 
   get prefix() {
@@ -61,20 +61,31 @@ module.exports = class Article {
     this._github = value;
   }
 
-  get redisClient() {
-    return this._redisClient;
+  get redis() {
+    return this._redis;
   }
 
-  set redisClient(value) {
-    this._redisClient = value;
+  set redis(value) {
+    if (!value) {
+      throw new Error('Article: missing redis');
+    }
+    this._redis = value;
+  }
+
+  get on_folder_homepage() {
+    return this._on_folder_homepage;
+  }
+
+  set on_folder_homepage(value) {
+    this._on_folder_homepage = value;
   }
 
   contentLoaded() {
-    return this.redisClient.exists(this.redisPath);
+    return this.redis.exists(this.redisPath);
   }
 
   metaLoaded() {
-    return this.redisClient.exists(this.redisMetaPath);
+    return this.redis.exists(this.redisMetaPath);
   }
 
   get redisPath() {
@@ -87,7 +98,7 @@ module.exports = class Article {
       .then((content) => {
         console.log('content for ', this.path);
         console.log(content);
-        this.redisClient.set(this.redisPath, content);
+        this.redis.set(this.redisPath, content);
         return content;
       });
   }
@@ -101,20 +112,29 @@ module.exports = class Article {
   }
 
   readMetadata() {
-    return this.redisClient.hgetall(this.redisMetaPath)
+    return this.redis.hgetall(this.redisMetaPath)
       .then((meta) => {
+        if (!meta) {
+          console.log('cannot get meta for ', this.redisMetaPath);
+          return {};
+        }
         // if(/client_side/.test(this.path)) console.log('metadata found for ', this.path, meta)
-        for (let field of 'title,intro,revised,on_homepage,hide,revised'.split(',')) {
+        for (let field of 'title,intro,revised,on_homepage,hide,revised,on_folder_homepage'.split(',')) {
           this[field] = meta[field];
         }
         this.on_homepage = !!parseInt(meta.on_homepage);
         this.hide = !!parseInt(meta.hide);
+
+        this.on_folder_homepage = !!parseInt(meta.on_folder_homepage);
+        if (this.on_folder_homepage) {
+          this.on_homepage = false;
+        }
         return meta;
       })
   }
 
   purgeMetadata() {
-    return this.redisClient.del(this.redisMetaPath);
+    return this.redis.del(this.redisMetaPath);
   }
 
   loadMetadata(data) {
@@ -136,7 +156,7 @@ module.exports = class Article {
 
                 for (let key in metaData) {
                   let value = toString(metaData[key]);
-                  promises.push(this.redisClient.hset(this.redisMetaPath, key, value));
+                  promises.push(this.redis.hset(this.redisMetaPath, key, value));
                 }
 
                 return Promise.all(promises);
@@ -229,7 +249,7 @@ module.exports = class Article {
   content() {
     return this.contentLoaded()
       .then((exists) => {
-        return exists ? this.redisClient.get(this.redisContentPath) : this.loadContent();
+        return exists ? this.redis.get(this.redisContentPath) : this.loadContent();
       });
   }
 }

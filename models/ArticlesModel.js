@@ -6,9 +6,9 @@ const INDEX_KEY = 'article-index';
 const HOMEPAGE_KEY = 'homepage-articles';
 
 module.exports = class ArticlesModel {
-  constructor(github, redisClient, prefix) {
+  constructor(github, redis, prefix) {
     this.github = github;
-    this.redisClient = redisClient;
+    this.redis = redis;
     this.prefix = prefix;
   }
 
@@ -22,12 +22,12 @@ module.exports = class ArticlesModel {
     this._prefix = value;
   }
 
-  get redisClient() {
-    return this._redisClient;
+  get redis() {
+    return this._redis;
   }
 
-  set redisClient(value) {
-    this._redisClient = value;
+  set redis(value) {
+    this._redis = value;
   }
 
   get github() {
@@ -49,32 +49,32 @@ module.exports = class ArticlesModel {
   /** ----------- methods ------------- */
 
   purge() {
-    return this.redisClient.keys(`${this.prefix}*`)
+    return this.redis.keys(`${this.prefix}*`)
       .then(
-        (keys) => Promise.all(keys.map((key) => this.redisClient.del(key)))
+        (keys) => Promise.all(keys.map((key) => this.redis.del(key)))
       )
   }
 
   purgeHomepageIndex() {
-    return this.redisClient.del(this.homepageRedisPath);
+    return this.redis.del(this.homepageRedisPath);
   }
 
   purgeArticleIndex() {
     // @TODO: test! doesn't work I think
-    return this.redisClient.del(this.indexRedisPath);
+    return this.redis.del(this.indexRedisPath);
   }
 
   setHomepageIndex(path) {
     try {
-      return this.redisClient.rpush(this.homepageRedisPath, path);
+      return this.redis.rpush(this.homepageRedisPath, path);
     } catch (err) {
       console.log('error setting homepage path: ', path, err.message);
     }
   }
 
   getHomepages() {
-    return this.redisClient.llen(this.homepageRedisPath)
-      .then((len) => this.redisClient.lrange(this.homepageRedisPath, 0, len))
+    return this.redis.llen(this.homepageRedisPath)
+      .then((len) => this.redis.lrange(this.homepageRedisPath, 0, len))
   }
 
   getIndexData(sha) {
@@ -95,11 +95,11 @@ module.exports = class ArticlesModel {
   }
 
   getArticleList() {
-    return this.redisClient.hgetall(this.indexRedisPath)
+    return this.redis.hgetall(this.indexRedisPath)
   }
 
   listArticle(path, sha) {
-    return this.redisClient.hset(this.indexRedisPath, path, sha);
+    return this.redis.hset(this.indexRedisPath, path, sha);
   }
 
   recordArticles(tree) {
@@ -118,9 +118,27 @@ module.exports = class ArticlesModel {
         .value()));
   }
 
+  getChapter(chapter) {
+    console.log('getting chapter: ', chapter);
+    let re = new RegExp(`^articles/${chapter}/`);
+    return this.getArticleList()
+      .then((articleList) => {
+        console.log('articleList: ', articleList);
+        return Promise.all(_(articleList)
+          .keys()
+          .filter((articlePath) => re.test(articlePath))
+          .map((articlePath) => {
+            console.log('getting article', articlePath);
+            return this.getArticle(articlePath);
+          })
+          .value()
+        );
+      });
+  }
+
   recordArticleMetadata(item) {
     let path = item.path.replace(/\.json$/, '.md');
-    let article = new Article(this.github, this.redisClient, {path: path, prefix: this.prefix});
+    let article = new Article(this.github, this.redis, {path: path, prefix: this.prefix});
     return article.purgeMetadata()
       .then(() => article.loadMetadata(item))
       .then(() => {
@@ -147,8 +165,8 @@ module.exports = class ArticlesModel {
 
   load() {
     return Promise.all([
-      this.redisClient.del(this.prefix + HOMEPAGE_KEY),
-      this.redisClient.del(this.prefix + INDEX_KEY)
+      this.redis.del(this.prefix + HOMEPAGE_KEY),
+      this.redis.del(this.prefix + INDEX_KEY)
     ])
       .then(() => getLastSha(this.github))
       .then((sha) => this.getIndexData(sha))
@@ -162,13 +180,13 @@ module.exports = class ArticlesModel {
 
   getArticle(path) {
     let data = {path, prefix: this.prefix};
-    return this.redisClient.hget(this.indexRedisPath, path)
+    return this.redis.hget(this.indexRedisPath, path)
       .then((sha) => {
         if (!sha) {
           throw new Error(`cannot find sha for ${path}`);
         }
         data.sha = sha;
-        let article = new Article(this.github, this.redisClient, data);
+        let article = new Article(this.github, this.redis, data);
         return article.readMetadata()
           .then(() => article);
       })
