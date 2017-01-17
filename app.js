@@ -4,7 +4,7 @@
  * Module dependencies.
  */
 
-var app = require('./init');
+var app = require('./src/init');
 var debug = require('debug')('wonderworldapi:server');
 var http = require('http');
 
@@ -12,7 +12,7 @@ var http = require('http');
  * Get port from environment and store in Express.
  */
 
-var port = normalizePort(process.env.PORT || '3123');
+var port = normalizePort(process.env.Ww_PORT || '3123');
 app.set('port', port);
 
 /**

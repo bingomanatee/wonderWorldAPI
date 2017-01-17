@@ -11,11 +11,11 @@ var github = new GithubApi({
   host: 'api.github.com',
   protocol: 'https'
 });
-const TOKEN = process.env.GITHUB_TOKEN;
-console.log('TOKEN:', TOKEN);
+const GITHUB_TOKEN = process.env.WW_GITHUB_TOKEN;
+console.log('GITHUB GITHUB_TOKEN:', GITHUB_TOKEN);
 github.authenticate({
   type: "token",
-  token: TOKEN,
+  token: GITHUB_TOKEN,
 });
 
 module.exports = github;
