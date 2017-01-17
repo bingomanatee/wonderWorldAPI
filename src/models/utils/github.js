@@ -2,7 +2,7 @@
 const GithubApi = require('github');
 
 var github = new GithubApi({
-  debug: true,
+  debug: false,
   headers: {
     "user-agent": "Wonderland-labs" // GitHub is happy with a unique user agent
   },
@@ -12,7 +12,7 @@ var github = new GithubApi({
   protocol: 'https'
 });
 const GITHUB_TOKEN = process.env.WW_GITHUB_TOKEN;
-console.log('GITHUB GITHUB_TOKEN:', GITHUB_TOKEN);
+console.log('GITHUB_TOKEN:', GITHUB_TOKEN);
 github.authenticate({
   type: "token",
   token: GITHUB_TOKEN,
