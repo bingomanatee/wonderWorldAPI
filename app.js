@@ -4,7 +4,7 @@
  * Module dependencies.
  */
 
-var app = require('../init');
+var app = require('./src/init');
 var debug = require('debug')('wonderworldapi:server');
 var http = require('http');
 
