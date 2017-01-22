@@ -4,7 +4,7 @@
  * Module dependencies.
  */
 
-var app = require('./init');
+var app = require('../init');
 var debug = require('debug')('wonderworldapi:server');
 var http = require('http');
 
@@ -12,7 +12,7 @@ var http = require('http');
  * Get port from environment and store in Express.
  */
 
-var port = normalizePort(process.env.PORT || '3123');
+var port = normalizePort(process.env.WW_PORT || '3123');
 app.set('port', port);
 
 /**
@@ -54,6 +54,8 @@ function normalizePort(val) {
  */
 
 function onError(error) {
+  console.log('error: ', error);
+
   if (error.syscall !== 'listen') {
     throw error;
   }
@@ -86,5 +88,5 @@ function onListening() {
   var bind = typeof addr === 'string'
     ? 'pipe ' + addr
     : 'port ' + addr.port;
-  debug('Listening on ' + bind);
+  debug('------------------ Listening on ' + bind);
 }
