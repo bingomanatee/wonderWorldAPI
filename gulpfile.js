@@ -10,7 +10,7 @@
       });
 
       gulp.task('prep', function() {
-        return gulp.src(['./**/*', '!./node_modules/', '!./node_modules/**/*']) // Gets all files ending with .scss in app/scss and children dirs
+        return gulp.src(['./**/*', '!./node_modules/', '!./node_modules/**/*','!./tests/', '!./tests/**/*']) // Gets all files ending with .scss in app/scss and children dirs
           .pipe(gulp.dest('dist'))
       });
 
@@ -21,11 +21,11 @@
         config.version = version.join('.');
         fs.writeFileSync(EB_CONFIG, JSON.stringify(config));
 
-        return gulp.src('dist/*')
+        return gulp.src('dist/**/*')
           .pipe(zip(config.archive_name + '.v' + config.version + '.zip'))
           .pipe(gulp.dest('eb'));
       });
 
-      gulp.task('eb', ['clear', 'prep', 'zip'], function () {
+      gulp.task('eb', ['clear', 'prep'], function () {
 
       });

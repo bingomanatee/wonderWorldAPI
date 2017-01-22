@@ -7,6 +7,11 @@ var bodyParser = require('body-parser');
 var articles = require('./routes/articles');
 var index = require('./routes/index');
 var cors = require('cors');
+/* -------- env check --------- */
+console.log('===================== env check ========================');
+console.log('initializing application with environment: ', process.env);
+console.log('========================================================');
+/* ---------------------------- */
 var app = express();
 
 app.use(cors())
