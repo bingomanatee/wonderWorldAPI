@@ -247,9 +247,6 @@ module.exports = class Article {
   }
 
   content() {
-    return this.contentLoaded()
-      .then((exists) => {
-        return exists ? this.redis.get(this.redisContentPath) : this.loadContent();
-      });
+    return this.loadContent();
   }
 }
