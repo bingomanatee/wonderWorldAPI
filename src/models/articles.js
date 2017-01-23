@@ -1,5 +1,17 @@
 'use strict';
 
-const Articles = require('./ArticlesModel');
+let github = require('./utils/github');
+const redis = require('./utils/redis');
 
-module.exports = (github, redis, prefix) => new Articles(github ,redis, prefix || 'wonderWorld');
+const Articles = require('./ArticlesModel');
+const PREFIX = 'live:';
+const HOME_PAGE_CACHE_PATH = `${PREFIX}HOMEPAGE_CACHE`;
+
+let articles = new Articles(github ,redis, PREFIX || 'wonderWorld');
+redis.flushall()
+  .then(() => articles.load());
+
+module.exports = {
+  HOME_PAGE_CACHE_PATH,
+  articles
+};

@@ -1,12 +1,9 @@
 var express = require('express');
 var router = express.Router();
-let github = require('./../models/utils/github');
 const redis = require('./../models/utils/redis');
-const PREFIX = 'live:';
-const HOME_PAGE_CACHE_PATH = `${PREFIX}HOMEPAGE_CACHE`;
-let articles = require('./../models/articles')(github, redis, PREFIX);
-redis.flushall()
-  .then(() => articles.load());
+let art = require('./../models/articles');
+const articles = art.articles;
+const HOME_PAGE_CACHE_PATH = art.HOME_PAGE_CACHE_PATH;
 
 /* GET users listing. */
 router.get('/homepage', function (req, res, next) {

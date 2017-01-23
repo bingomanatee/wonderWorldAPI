@@ -1,9 +1,16 @@
 const _ = require('lodash');
 const Article = require('./Article');
 const getLastSha = require('./utils/getLastSha');
+const blobData = require('./utils/blobData');
 
 const INDEX_KEY = 'article-index';
 const HOMEPAGE_KEY = 'homepage-articles';
+const IMAGE_KEY = 'images';
+
+const IMG_RE = /^images\/.*(jpg|jpeg|png|gif)$/i;
+const MARKDOWN_RE = /\.md$/;
+const JSON_RE = /\.json$/;
+const BACKUPS_RE = /\.backups/;
 
 module.exports = class ArticlesModel {
   constructor(github, redis, prefix) {
@@ -45,6 +52,9 @@ module.exports = class ArticlesModel {
   get indexRedisPath() {
     return `${this.prefix}${INDEX_KEY}`;
   }
+  get imageRedisPath() {
+    return `${this.prefix}${IMAGE_KEY}`;
+  }
 
   /** ----------- methods ------------- */
 
@@ -53,6 +63,10 @@ module.exports = class ArticlesModel {
       .then(
         (keys) => Promise.all(keys.map((key) => this.redis.del(key)))
       )
+  }
+
+  purgeImageIndex() {
+    return this.redis.del(this.imageRedisPath);
   }
 
   purgeHomepageIndex() {
@@ -86,20 +100,33 @@ module.exports = class ArticlesModel {
     })
   }
 
+  isImage(item) {
+    return IMG_RE.test(item.path);
+  }
+
   isArticle(item) {
-    return /\.md$/.test(item.path) && (!/\.backups/.test(item.path));
+    return MARKDOWN_RE.test(item.path) && (!BACKUPS_RE.test(item.path));
   }
 
   isMetadata(item) {
-    return /\.json$/.test(item.path) && (!/\.backups/.test(item.path));
+    return JSON_RE.test(item.path) && (!BACKUPS_RE.test(item.path));
   }
 
   getArticleList() {
-    return this.redis.hgetall(this.indexRedisPath)
+    return this.redis.hgetall(this.indexRedisPath);
   }
 
   listArticle(path, sha) {
     return this.redis.hset(this.indexRedisPath, path, sha);
+  }
+
+  listImage(path, sha) {
+    return this.redis.hset(this.imageRedisPath, path, sha);
+  }
+
+  getImage(path) {
+    return this.redis.hget(this.imageRedisPath, path)
+      .then((sha) => blobData(this.github, sha));
   }
 
   recordArticles(tree) {
@@ -123,12 +150,10 @@ module.exports = class ArticlesModel {
     let re = new RegExp(`^articles/${chapter}/`);
     return this.getArticleList()
       .then((articleList) => {
-        console.log('articleList: ', articleList);
         return Promise.all(_(articleList)
           .keys()
           .filter((articlePath) => re.test(articlePath))
           .map((articlePath) => {
-            console.log('getting article', articlePath);
             return this.getArticle(articlePath);
           })
           .value()
@@ -163,6 +188,17 @@ module.exports = class ArticlesModel {
       )
   }
 
+  recordImages(tree) {
+    return this.purgeImageIndex()
+      .then(() => Promise.all(
+        _(tree)
+          .filter(this.isImage)
+          .map((item) => this.listImage(item.path, item.sha))
+          .value()
+        )
+      )
+  }
+
   load() {
     return Promise.all([
       this.redis.del(this.prefix + HOMEPAGE_KEY),
@@ -172,7 +208,8 @@ module.exports = class ArticlesModel {
       .then((sha) => this.getIndexData(sha))
       .then((data) => Promise.all([
           this.recordArticles(data.tree),
-          this.recordMetadata(data.tree)
+          this.recordMetadata(data.tree),
+          this.recordImages(data.tree)
         ]
         ) // end all
       ) // end then
